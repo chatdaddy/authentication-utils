@@ -1,2 +1,1 @@
-# authentication-utils
-ChatDaddy Authentication Utilities
+# ChatDaddy Authentication Utilities
