@@ -6,6 +6,12 @@ import { URL } from 'url'
 import { STATUS_CODES } from 'http'
 
 const DEF_TOKEN_EXPIRY = 60 // in minutes
+const PUBLIC_KEY = `
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEevVHEB81+mIuHJ6Ka2+GveuyAb2P
+SNEGnm4K1V6HzZF0F9+mQS7N0UHNE+gv0OQIKi5D6e48ZCVytj3iX4Todg==
+-----END PUBLIC KEY-----
+`
 
 export type AuthenticationController = ReturnType<typeof makeAuthenticationController>
 
@@ -28,7 +34,6 @@ export type TeamDetails = {
 export const makeAuthenticationController = (refreshToken: string, baseUrl?: string) => {
     baseUrl = baseUrl || process.env.AUTH_SERVICE_URL
     refreshToken = refreshToken
-    const publicKey = got(new URL('/public/public.pem', baseUrl)).then(r => r.rawBody)
     const tokenCache = new NodeCache ({ stdTTL: DEF_TOKEN_EXPIRY*60 - 1 })
 
     const getToken = (teamId: string) => {
@@ -42,8 +47,11 @@ export const makeAuthenticationController = (refreshToken: string, baseUrl?: str
                     grant_type: 'refresh_token',
                     expiration: DEF_TOKEN_EXPIRY
                 }
-                const response = await got.post (url, { body: querystring.encode (requestBody), headers: { 'content-type': 'application/x-www-form-urlencoded' } })
-                const responseJSON = JSON.parse (response.body)
+                const response = await got.post (url, { 
+                    body: querystring.encode (requestBody), 
+                    headers: { 'content-type': 'application/x-www-form-urlencoded' } 
+                })
+                const responseJSON = JSON.parse(response.body)
                 return responseJSON.accessToken as string
             })()
             tokenCache.set(teamId, task)
@@ -53,8 +61,8 @@ export const makeAuthenticationController = (refreshToken: string, baseUrl?: str
     
     return {
         // authenticates a token
-        authenticate: async (token: string) => {
-            const user: any = JWT.verify (token, await publicKey, { algorithms: [ 'ES256' ] })
+        authenticate: (token: string) => {
+            const user: any = JWT.verify(token, PUBLIC_KEY, { algorithms: [ 'ES256' ] })
             const teamId = user.user.teamId
             const serviceId = user.user.teamOwner
             return {
@@ -86,12 +94,17 @@ export const Authorize = (...scopes: number[]) => (
         if (authorized) {
             next()
         } else {
-            res.status(403).send (
-                { code: 403, error: 'You don\'t have access to this method', message: STATUS_CODES[403] }
+            res.status(403).send(
+                { 
+                    code: 403, 
+                    error: 'You don\'t have access to this method', 
+                    message: STATUS_CODES[403] 
+                }
             )
         }
     }
 )
+
 export const isUserAuthorized = (user: ChatDaddyAPIUser, scopes: number[]) => {
     const userScopes: string = user.scope
     const authorized = scopes.filter(idx => userScopes[idx] !== '1').length < scopes.length
