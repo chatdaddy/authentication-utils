@@ -1,7 +1,6 @@
 import got from 'got'
 import JWT from 'jsonwebtoken'
 import NodeCache from 'node-cache'
-import querystring from 'querystring'
 import { URL } from 'url'
 import { STATUS_CODES } from 'http'
 
@@ -40,21 +39,26 @@ export const makeAuthenticationController = (refreshToken: string, baseUrl?: str
         let task: Promise<string> = tokenCache.get(teamId)
         if(!task) {
             task = (async () => {
-                const url = new URL('oauth/token', baseUrl)
+                const url = new URL('oauth2/token', baseUrl)
                 const requestBody = {
                     refresh_token: refreshToken,
                     team_id: teamId,
                     grant_type: 'refresh_token',
                     expiration: DEF_TOKEN_EXPIRY
                 }
-                const response = await got.post (url, { 
-                    body: querystring.encode (requestBody), 
-                    headers: { 'content-type': 'application/x-www-form-urlencoded' } 
+                const {body} = await got.post<{ access_token: string }>(url, { 
+                    json: requestBody, 
+                    responseType: 'json'
                 })
-                const responseJSON = JSON.parse(response.body)
-                return responseJSON.accessToken as string
+                return body.access_token
             })()
-            tokenCache.set(teamId, task)
+            tokenCache.set(
+                teamId, 
+                task
+                .catch(() => {
+                    tokenCache.del(teamId)
+                })
+            )
         }
         return task
     }
